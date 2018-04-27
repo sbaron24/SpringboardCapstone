@@ -1,0 +1,77 @@
+---
+title: "VSE Queue Recommender"
+author: "Sean Baron"
+date: "4/25/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+**What is the problem you want to solve?**
+
+PsychicSource is a psychic hotline brand owned by VSE, Inc. The company matches people that want to chat via phone, message, or video to psychic advisors. PsychicSource currently uses a queue callback system which allows people that call into the service to enter a queue when the psychic they wish to speak with is unavailable at the time they've called in to speak with them. I'd like to build a recommender that recommends another psychic advisor that the user would enjoy.
+
+
+**Who is your client and why do they care about this problem? In other words, what will your client DO or DECIDE based on your analysis that they wouldn’t have otherwise?**
+
+This presents an opportunity to make a 'smart' advisor recommendation to users. The hypothesis is that the recommender will reduce supply-demand inefficiency on the service, improve customer and psychic advisor experience and increase profit, all which are important to the business.
+
+**What data are you going to use for this? How will you acquire this data?**
+
+I've been granted access to the live business data warehouse for VSE and am working with the data engineer to get any data I need. 
+
+**In brief, outline your approach to solving this problem (knowing that this might change later).**
+
+The following is the 'story' that I'm going to attempt to tell using the data. It attempts to clarify what data I'll need and motivate the problem to the business.
+
+#### Part 1:
+#####Customers
+A) 30% of individuals in the last month are waiting in queues. 
+B) Of the 30 % that enter, X% sit for this long (distribution, and includes people who go sit in another queue) and Y% leave before a call
+C) Psychics:
+   Here's the distribution of how long psychics sitting idle and how much it's costing the business (Rate * Time Spent with No Conferences)
+   Comparison: Overlaid distributions, geom_histogram(fill = Role, 
+          y = time idle, x = continous advisor_popularity) # advisor_popularity based on rating and queue length? Establishd KPIs..
+
+D) Conclusion - Lots of $ left on the table: Number of idle customer minutes * Rate of Idle Advisors (fair measure?)
+
+#### Part 2: Metrics
+#####The ONE METRIC to track: 
+I = total customer time spent idle / total psychic time spent idle
+####Other metrics: 
+profit recovered = length time customer would have waited in queue * dollars spent on successful recommended call
+avg time to call for customer = conversation start time - time logged on
+avg time to call for psychic = conversation start time - time logged on
+
+#### Part 3: More in depth
+Why or why not a recommendation engine would work (What's behavior of people who wait in queues? What evidence is there that person might try another psychic?)  
+Who might respond best to recommendations? People with lower loyalty. 
+##### Psychic Loyalty Profile:
+  How loyal are customers? What percentage of people are getting in line for someone they've used formerly? 
+  L-score: % of last calls spent with same advisor
+  What's the distribution of L-scores? **Hypothesis: people with low L-scores more likely to respond to a recommendation than a random sample and 
+  even more so than people with high L-scores. 
+
+  Confident Hypothesis: strong positive correlation between L-score and time spent in queue.
+  What is the cutoff for time spent in queue at which people are most likely to accept recommendation? 
+      Time when people tend to drop off the line is a strong indicator. May be able to predict/classify best times to make recommendation.
+    
+  How strong is the correlation between number of times (start with most recent calls) customer has spoken to psychic and time waited in queue
+  If the correlation is weak then it stands to reason that inviduals may respond well to recommendations. However not likely to be the case..
+  
+#### Part 4: Measuring the success of a recommender
+Conference ratings of recommendations
+
+...Future analysis could look at segmentation of customers and psychics, could think about what more data may help make recommendations better...
+
+**What are your deliverables? Typically, this would include code, along with a paper and/or a slide deck.**
+
+As suggested, the code developed, a write-up, a slide deck and any other materials suggested by Springboard.
+
+
+
