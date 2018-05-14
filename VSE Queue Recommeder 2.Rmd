@@ -9,15 +9,10 @@ PsychicSource is a an phone chat service that connects members to psychic adviso
 
 The underlying hypothesis of this project is: a member-psychic recommendation engine can increase average minutes spent talking to psychic advisors on Psychicsource.com by members.
 
-```{r echo = FALSE}
+```{r echo = FALSE, message = FALSE, warning = FALSE}
 # Load packages
 library(dplyr)
 library(ggplot2)
-```
-
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ### Getting and Cleaning the Data
@@ -25,7 +20,7 @@ knitr::opts_chunk$set(echo = TRUE)
 The data from VSE is stored in a sequel database. To access it, I am able to log into the company's SAP reporting system called Business Objects and create tables (similar to an Excel UI) with columns of interest, export the tables as CSVs, and load them in R as follows.
 
 To gain a better sense of how members use the service and specifically queue system to connect with advisors, data from a "Queue" table and "Conference" table need to be joined.
-```{r}
+```{r warning = FALSE}
 # Load Queue Data
 queue.status <- read.csv("Queue_Status_3.csv") # load BOE Queue Status table
 queue.status <- queue.status %>% mutate(Is.Callback = as.factor("Yes"))
@@ -44,7 +39,6 @@ conference.queues$Conference.End.Date.Full <- as.POSIXct(strptime(conference.que
 conference.queues$Disposition.Date.Full <- as.POSIXct(strptime(conference.queues$Disposition.Date.Full, format = "%Y/%m/%d %H:%M:%S"))
 
 # Remove outlier Membership.ID == 84073 - fake member created by service
-queue.conf.counts %>% filter(n_nq == 0) %>% arrange(desc(n_queues))
 conference.queues <- conference.queues %>% filter(!(Membership.ID == 84073))
 
 # Rename a column
@@ -55,47 +49,51 @@ conference.queues$Conference.Length.minutes <- as.numeric(round(difftime(confere
 ```
 
 
-### Data Viz and Statistics
+### Data Viz and Statistics  
 
-##### Number of Direct Conferences (entered without waiting in a queue) vs. Number of Queues Entered
+##### Number of Direct Conferences (entered without waiting in a queue) vs. Number of Queues Entered  
 
-```{r}
+```{r eval = TRUE}
 ggplot(conference.queues, aes(x = Is.Callback)) + geom_bar()
 ```
-The barplot shows that the majority of calls made are not through a queue, however a significant portion of queues are entered by members. Since so many queues are entered, it may be helpful to understand how many of those calls are successfully completed.
-
-Number of 'Completed' Queue Conferences vs. Number of 'Deleted' Queue Conferences
-```{r}
+  
+The barplot shows that the majority of calls made are not through a queue, however a significant portion of queues are entered by members. Since so many queues are entered, it may be helpful to understand how many of those calls are successfully completed.  
+  
+##### Number of 'Completed' Queue Conferences vs. Number of 'Deleted' Queue Conferences  
+```{r eval = TRUE}
 queues <- conference.queues %>% filter(Is.Callback == "Yes")
 ggplot(queues, aes(x = Callback.Status)) + geom_bar()
 ```
-The barplot above shows that about half of calls are Deleted from the queue. This could be for a variety of reasons - they may have rejected the call while on another call with an advisor or they may have forgotten about the call and the system timed out their spot in line.
-
+  
+The barplot above shows that about half of calls are Deleted from the queue. This could be for a variety of reasons - they may have rejected the call while on another call with an advisor or they may have forgotten about the call and the system timed out their spot in line.  
+  
 Rather than digging deeper into what members are doing while waiting in a queue and even an interesting metric like the amount of time they're spending idle/spent not speaking with anyone in a queue, I believe it would be more helpful to look at how queue behavior as it stands today impacts an important metric, like 'minutes spent speaking with an advisor', which has a direct impact on bottom line.
+  
+##### Relating Queue Behavior to 2 Measures of Performance: Number of Conferences and Number of Minutes Chatting with Advisors  
 
-##### Relating Queue Behavior to 2 Measures of Performance: Number of Conferences and Number of Minutes Chatting with Advisors
-
-```{r echo=FALSE}
+```{r eval=TRUE}
 
 # Create 'count' dataframe with # queues entered, # direct calls made, time between first and last queue entry (for perspective), and total chat time across all conferences.
 queue.conf.counts <- conference.queues %>% group_by(Membership.ID) %>% summarise(n_queues = sum(Is.Callback == "Yes"), n_nq = sum(Is.Callback == "No"), date_first_q = min(Date.Added.to.Queue.Full, na.rm = TRUE), date_last_q = max(Date.Added.to.Queue.Full, na.rm = TRUE), day_diff = round(difftime(date_last_q, date_first_q, units = "days"), 3), total_chat_time = round(sum(Conference.Length.minutes, na.rm = TRUE), 2))
 ```
+  
 
-
-```{r}
+```{r eval = TRUE}
 ggplot(queue.conf.counts, aes(x = n_queues, y = n_nq)) + geom_point(alpha = 0.3, size = 1) + stat_smooth(method = "lm", se = FALSE)
 cor(queue.conf.counts$n_queues, queue.conf.counts$n_nq)
 ```
+  
 The scatterplot shows a moderatley strong, positive linear correlation between Number of Queues Entered and Number of Direct Conferences (r = 0.41). The plot indicates that members who enter more queues also have a greater number of separate, non-queue, or direct, calls with advisors. This reveals that time spent in queues are not a bad thing but indicate active members of the service.
-
+  
 Getting more detailed and closely measureable, we can also see how the Number of Queues Entered and Minutes Spent Chatting with Advisors is related:
-
-```{r}
+  
+```{r eval= TRUE}
 ggplot(queue.conf.counts, aes(x = n_queues, y = total_chat_time)) + geom_point(alpha = 0.3, size = 1) + stat_smooth(method = "lm", se = FALSE)
 cor(queue.conf.counts$n_queues, queue.conf.counts$total_chat_time)
 ```
+  
 The scatterplot shows a moderatley strong, positive linear correlation between Number of Queues Entered and Number of Minutes Chatting with an Advisor (r = 0.44).
-
+  
 Having evidence that increased queue entry correlates to more time spent chatting with psychics, this analysis provides the basis for unnderstanding the effectiveness of the recommender. Specificially, we can use a graph similar to the one above to see whether (main hypothesis) ***members in queues that DO receive a recommendation (experimental condition) are more highly correlated with greater Total Chat Time with Advisors than members in queues that DO NOT receive a recommendation (control group)***. The outcome measure may also be transactions with PsychicSource to even more closely measure the impact on bottom line.
 
 
@@ -103,7 +101,7 @@ Having evidence that increased queue entry correlates to more time spent chattin
 
 The first idea was to build a collaborative filter using member conference ratings. However the analysis below shows that a ratings based approach (probably) isn't possible because only 10% of converences and 8% of experts have ratings. 
 
-```{r}
+```{r eval = FALSE}
 # Load ratings data
 ratings <- read.csv("New__Document.csv")
 
@@ -123,6 +121,7 @@ Potential indicators to test
 
 
 -------
+Notes:
 Next graph, after recommendationn engine is implemented should show:
 Shows number of accepted queue recommendations and total minutes spent chatting (per month). 
 Shows number of accepted queue recommendations and total transactions spent (per month). 
