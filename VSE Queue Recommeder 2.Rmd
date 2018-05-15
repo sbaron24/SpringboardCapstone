@@ -99,8 +99,7 @@ Having evidence that increased queue entry correlates to more time spent chattin
 
 ### Building a Recommender
 
-The first idea was to build a collaborative filter using member conference ratings. However the analysis below shows that a ratings based approach (probably) isn't possible because only 10% of converences and 8% of experts have ratings. 
-
+The first idea was to build a collaborative filter using member conference ratings. However the analysis below shows that a ratings based approach (probably) isn't possible because members only give ratings to 10% of conferences and 8% of experts have conference-based ratings by users. This is shown here:
 ```{r eval = FALSE}
 # Load ratings data
 ratings <- read.csv("New__Document.csv")
@@ -112,13 +111,44 @@ ratings %>% summarise(total_num_ratings = sum(!is.na(Conference.Star.Rating)), t
 ratings %>% group_by(Expert.ID) %>% summarise(expert_rating_count = sum(!is.na(Conference.Star.Rating)), expert_conference_count = n()) %>% summarise(experts_with_ratings = sum(expert_rating_count==0), total_experts = n(), percentage_experts_with_ratings = experts_with_ratings/total_experts)
 ```
 
+##### Creating a Rating Metric
 
-Yes, we don't have ratings for all our members... but hope is not lost! Since 10% of conferences and 8% of advisors have ratings we can build and test a model that 'rates' experts for a members based on their behavior. 
+Since many members don't rating calls, we'll need to use other metrics to build a rating score that the collaborative filter will use.  
 
-Potential indicators to test
+The 2 metrics I'll use will measure 1) how 'above or below average' the durations of the conferences that each member has with a particular are and 2) what percentage of the members total conferences are spent with a given expert. They will be combined to created the member expert rating.
+
+This recommender will be applied to people with 20 or more conferences (in the last four months, the dataset taken) so that there's enough conference data to determine expert preference.
+
+```{r}
+# Select members that have had >=20 conferences
+multimembers <- ratings %>% group_by(Membership.ID) %>% count() %>% filter(n >= 20)
+multimembers <- multimembers$Membership.ID
+multimember.df <- ratings %>% select(Membership.ID, Expert.ID, Conference.Duration) %>% filter(Membership.ID %in% multimembers)
+
+# DF of members and total number of conferences they've had - to be left joined to dataframe below to calculate metric 2
+MultiMember.Total.Conferences <- multimember.df %>% group_by(Membership.ID) %>% count() %>% rename(Member.Total.Conf.Count = n)
+
+multimember.df <- multimember.df %>% group_by(Membership.ID) %>% mutate(Z_score = (Conference.Duration - mean(Conference.Duration))/sd(Conference.Duration)) %>% ungroup() %>% group_by(Membership.ID, Expert.ID) %>% summarise(Z.score.sum = sum(Z_score), Member.Expert.Conf.Count = n()) %>% left_join(MultiMember.Total.Conferences, by = "Membership.ID") %>% mutate(Expert.as.Percent.of.Member.Total.Calls = Member.Expert.Conf.Count/Member.Total.Conf.Count, Member.Expert.Rating = Z.score.sum*Expert.as.Percent.of.Member.Total.Calls)
+
+# DF of Members, Experts, and Member-Expert Ratings
+My.Ratings <- multimember.df %>% select(Membership.ID, Expert.ID, Member.Expert.Rating)
+```
+
+Ratings are normally distributed which reassures our work with z-scores and percentages of conferences
+```{r}
+summary(My.Ratings$Member.Expert.Rating)
+ggplot(My.Ratings, aes(x = Member.Expert.Rating)) + geom_density()
+```
+
+##### Constructing A Similarity Matrix
+
+
+
+
+```{r eval = FALSE, echo = FALSE}
+Notes
+Model Approach Buildinng ratings - this may nnot be as good though because the insufficient information for people without many calls is low and the approach above gives scores as nonrmalized top each individuals' behavior.
 -minutes spent chatting with advisor * (# calls with advisors/# total calls with all advisors)^2 (maybe the second term is more important?)
-
-
 
 -------
 Notes:
@@ -133,7 +163,7 @@ STORY:
 -Of those, well over HALF are Deleted. Now, some of these members may connect while waiting, however some don't...
 -Number of members who've entered 1 or more queues in month and have NOT completed a single call: ~730
 -1 Metrics That Matters (for the bottom line): Number of minutes chatting with an advisor
-
+```
 
 
 
