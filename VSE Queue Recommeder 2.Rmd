@@ -2,7 +2,7 @@
 title: "VSE Queue Recommender 2"
 author: "Sean Baron"
 date: "5/14/2018"
-output: html_document
+output: github_document
 ---
 
 PsychicSource is a an phone chat service that connects members to psychic advisors who give them readings. Members call in and either connect with a psychic directly, if they're available, or enter themselves in a queue and wait for the advisor they wish to speak with. While waiting, may enter into other advisor phone conferences, browse the directory of advisors, or leave the service altogether; the system will call them back to connect with their desired advisor when the member has reached the front of the queue.
