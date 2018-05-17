@@ -1,0 +1,134 @@
+---
+title: "VSE Queue Recommender 2"
+author: "Sean Baron"
+date: "5/14/2018"
+output: html_document
+---
+
+PsychicSource is a an phone chat service that connects members to psychic advisors who give them readings. Members call in and either connect with a psychic directly, if they're available, or enter themselves in a queue and wait for the advisor they wish to speak with. While waiting, may enter into other advisor phone conferences, browse the directory of advisors, or leave the service altogether; the system will call them back to connect with their desired advisor when the member has reached the front of the queue.
+
+The underlying hypothesis of this project is: a member-psychic recommendation engine can increase average minutes spent talking to psychic advisors on Psychicsource.com by members.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# Load packages
+library(dplyr)
+library(ggplot2)
+```
+
+### Getting and Cleaning the Data
+
+The data from VSE is stored in a sequel database. To access it, I am able to log into the company's SAP reporting system called Business Objects and create tables (similar to an Excel UI) with columns of interest, export the tables as CSVs, and load them in R as follows.
+
+To gain a better sense of how members use the service and specifically queue system to connect with advisors, data from a "Queue" table and "Conference" table need to be joined.
+```{r warning = FALSE}
+# Load Queue Data
+queue.status <- read.csv("Queue_Status_3.csv") # load BOE Queue Status table
+queue.status <- queue.status %>% mutate(Is.Callback = as.factor("Yes"))
+
+# Load Conference Data
+conferences <- read.csv("Conferences (1).csv")
+conferences.nq <- conferences %>% filter(Is.Callback == "No") %>% mutate(Callback.Status = NA, Date.Added.to.Queue.Full = NA, Disposition.Date.Full = NA, Disposition.Reason = NA, Disposition.Activity = NA, Time.to.Conference..minutes. = NA)
+
+# Combine Queue and Conference data
+conference.queues <- bind_rows(queue.status, conferences.nq)
+
+# Changing to date columns from type factor to type POSIXct
+conference.queues$Date.Added.to.Queue.Full <- as.POSIXct(strptime(conference.queues$Date.Added.to.Queue.Full, format = "%Y/%m/%d %H:%M:%S"))
+conference.queues$Conference.Start.Date.Full <- as.POSIXct(strptime(conference.queues$Conference.Start.Date.Full, format = "%Y/%m/%d %H:%M:%S"))
+conference.queues$Conference.End.Date.Full <- as.POSIXct(strptime(conference.queues$Conference.End.Date.Full, format = "%Y/%m/%d %H:%M:%S"))
+conference.queues$Disposition.Date.Full <- as.POSIXct(strptime(conference.queues$Disposition.Date.Full, format = "%Y/%m/%d %H:%M:%S"))
+
+# Remove outlier Membership.ID == 84073 - fake member created by service
+conference.queues <- conference.queues %>% filter(!(Membership.ID == 84073))
+
+# Rename a column
+conference.queues <- conference.queues %>% rename(Minutes.Until.Conference = Time.to.Conference..minutes.)
+
+# New columns for measurinng total time spent in conferences
+conference.queues$Conference.Length.minutes <- as.numeric(round(difftime(conference.queues$Conference.End.Date.Full, conference.queues$Conference.Start.Date.Full, units = "mins"), 1))
+
+# Add Conference.Status column
+conference.queues <- conference.queues %>% mutate(Conference.Status = ifelse(!is.na(Conference.ID), "Complete", "Incomplete"))
+```
+
+
+### Data Viz and Statistics
+
+##### Comparison of Successfull Conferences and Queue Usage
+
+```{r eval = TRUE}
+percent_incomplete <- conference.queues %>% summarise(incomplete = sum(Conference.Status == "Incomplete")/n())
+percent_incomplete_chr <- paste(round(percent_incomplete, 3)*100, sep = "", "%")
+
+g <- ggplot(conference.queues, aes(x = Conference.Status, fill = Is.Callback)) + geom_bar(position = "stack") + ggtitle("Comparison of Successfull Conferences and Queue Usage")
+
+g + theme(plot.title = element_text(hjust = 0.5)) + xlab("Conference Success") + theme(axis.title.x = element_text(margin = margin(t = 20, r = 0, b = 0, l = 0))) + theme(axis.title.y = element_text(margin = margin(t = , r = 15, b = 0, l = 0))) + guides(fill=guide_legend(title="Queue Entry")) + geom_text(x = 2, y = 10000, label = as.character(percent_incomplete_chr))
+```
+
+##### Relating Queue Usage to 2 Measures of Performance: Number of Completed Conferences and Number of Minutes Chatting with Advisors  
+
+```{r eval=TRUE}
+# Create 'count' dataframe with # queues entered, # direct calls made, time between first and last queue entry (for perspective), and total chat time across all conferences.
+queue.conf.counts <- conference.queues %>% group_by(Membership.ID) %>% summarise(Number.Queues.Entered = sum(Is.Callback == "Yes"), Number.Completed.Conferences = sum(Conference.Status == "Complete"), date_first_q = min(Date.Added.to.Queue.Full, na.rm = TRUE), date_last_q = max(Date.Added.to.Queue.Full, na.rm = TRUE), day_diff = round(difftime(date_last_q, date_first_q, units = "days"), 3), total_chat_time = round(sum(Conference.Length.minutes, na.rm = TRUE), 2))
+
+```
+  
+##### Number of Queues Entered vs. Number of Completed Conferences by Member (March 30th - April 30th, 2018)
+```{r eval = TRUE}
+ggplot(queue.conf.counts2, aes(x = Number.Queues.Entered, y = Number.Completed.Conferences)) + geom_point(alpha = 0.3, size = 1) + stat_smooth(method = "lm", se = FALSE) + ggtitle("Number of Queues Entered vs. Number of Completed Conferences by Member \n (March 30th - April 30th, 2018)") + theme(plot.title = element_text(hjust = 0.5)) + xlab("Number of Queues Entered by Member") + ylab("Number of Total Conferences by Members") + theme(axis.title.x = element_text(margin = margin(t = 20, r = 0, b = 0, l = 0))) + theme(axis.title.y = element_text(margin = margin(t = , r = 15, b = 0, l = 0))) + geom_text(x = 100, y = 225, label = paste("r = ", as.character(round(cor(queue.conf.counts2$Number.Queues.Entered, queue.conf.counts2$Number.Completed.Conferences), 2))))
+
+# cor(queue.conf.counts2$Number.Queues.Entered, queue.conf.counts2$Number.Completed.Conferences)
+```
+
+##### Number of Queues Entered vs. Total Chat Time by Member \n (March 30th - April 30th, 2018)
+  
+```{r eval= TRUE}
+ggplot(queue.conf.counts, aes(x = Number.Queues.Entered, y = total_chat_time)) + geom_point(alpha = 0.3, size = 1) + stat_smooth(method = "lm", se = FALSE) + ggtitle("Number of Queues Entered vs. Total Chat Time by Member \n (March 30th - April 30th, 2018)") + theme(plot.title = element_text(hjust = 0.5)) + xlab("Number of Queues Entered by Member") + ylab("Total Chat Time by Members (Minutes)") + theme(axis.title.x = element_text(margin = margin(t = 20, r = 0, b = 0, l = 0))) + theme(axis.title.y = element_text(margin = margin(t = , r = 15, b = 0, l = 0))) + geom_text(x = 100, y = 1750, label = paste("r = ", as.character(round(cor(queue.conf.counts$Number.Queues.Entered, queue.conf.counts$total_chat_time), 2))))
+
+# cor(queue.conf.counts$Number.Queues.Entered, queue.conf.counts$total_chat_time) 
+```
+  
+### Building a Recommender
+
+The first idea was to build a collaborative filter using member conference ratings. However the analysis below shows that a ratings based approach (probably) isn't possible because members only give ratings to 10% of conferences and 8% of experts have conference-based ratings by users. This is shown here:
+```{r eval = TRUE}
+# Load ratings data
+ratings <- read.csv("ratings.csv")
+
+# 10% of conferences have ratings (in last four months)
+ratings %>% summarise(total_num_ratings = sum(!is.na(Conference.Star.Rating)), total_num_conferences = n(), confs_with_ratings = total_num_ratings/total_num_conferences)
+
+# 8% of experts have ratings (in last four months)
+ratings %>% group_by(Expert.ID) %>% summarise(expert_rating_count = sum(!is.na(Conference.Star.Rating)), expert_conference_count = n()) %>% summarise(experts_with_ratings = sum(expert_rating_count==0), total_experts = n(), percentage_experts_with_ratings = experts_with_ratings/total_experts)
+```
+
+##### Creating a Rating Metric
+
+Since many members don't rating calls, we'll need to use other metrics to build a rating score that the collaborative filter will use.  
+
+The 2 metrics I'll use will measure 1) how 'above or below average' the durations of the conferences that each member has with a particular are and 2) what percentage of the members total conferences are spent with a given expert. They will be combined to created the member expert rating.
+
+This recommender will be applied to people with 20 or more conferences (in the last four months, the dataset taken) so that there's enough conference data to determine expert preference.
+
+```{r}
+# Select members that have had >=20 conferences
+multimembers <- ratings %>% group_by(Membership.ID) %>% count() %>% filter(n >= 20)
+multimembers <- multimembers$Membership.ID
+multimember.df <- ratings %>% select(Membership.ID, Expert.ID, Conference.Duration) %>% filter(Membership.ID %in% multimembers)
+
+# DF of members and total number of conferences they've had - to be left joined to dataframe below to calculate metric 2
+MultiMember.Total.Conferences <- multimember.df %>% group_by(Membership.ID) %>% count() %>% rename(Member.Total.Conf.Count = n)
+
+multimember.df <- multimember.df %>% group_by(Membership.ID) %>% mutate(Z_score = (Conference.Duration - mean(Conference.Duration))/sd(Conference.Duration)) %>% ungroup() %>% group_by(Membership.ID, Expert.ID) %>% summarise(Z.score.sum = sum(Z_score), Member.Expert.Conf.Count = n()) %>% left_join(MultiMember.Total.Conferences, by = "Membership.ID") %>% mutate(Expert.as.Percent.of.Member.Total.Calls = Member.Expert.Conf.Count/Member.Total.Conf.Count, Member.Expert.Rating = Z.score.sum*Expert.as.Percent.of.Member.Total.Calls)
+
+# DF of Members, Experts, and Member-Expert Ratings
+My.Ratings <- multimember.df %>% select(Membership.ID, Expert.ID, Member.Expert.Rating)
+```
+
+Ratings are normally distributed which reassures our work with z-scores and percentages of conferences
+```{r}
+summary(My.Ratings$Member.Expert.Rating)
+ggplot(My.Ratings, aes(x = Member.Expert.Rating)) + geom_density()
+```
+
+
