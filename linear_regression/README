@@ -1,0 +1,19 @@
+The purpose of this folder is to present the linear.regression.R file to my mentor R for grading for the Linear Regression section of the Intro to Data Science.
+
+The code to be reviewed in the linear.regression.R file, following example exercises presented and directly following exercise prompts.
+
+The project uses a Hardvard University R statistics project found at this URL: http://tutorials.iq.harvard.edu/R/Rstatistics/Rstatistics.html 
+
+The data contains various information about states in the US. It has dimensions 51 rows and 21 columns, 1 row for each state and 21 variables.
+
+Here's an example of some of the variables:
+
+     names                      var.labels
+14    csat        Mean composite SAT score
+15    vsat           Mean verbal SAT score
+16    msat             Mean math SAT score
+17 percent       % HS graduates taking SAT
+18 expense Per pupil expenditures prim&sec
+19  income Median household income, $1,000
+20    high             % adults HS diploma
+21 college         % adults college degree
